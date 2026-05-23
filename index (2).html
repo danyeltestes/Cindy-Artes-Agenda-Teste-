@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Cindy Artes Agenda - CAA.23.05#1.1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Bibliotecas para Gerar PDF/Imagem do Recibo -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        
+        :root {
+            --primary: #F06292;
+            --primary-dark: #D81B60;
+            --primary-light: #FCE4EC;
+            --bg: #FFF9FA;
+            --text-main: #3D0A1B;
+        }
+
+        /* Sistema de Zoom Responsivo (Fase 1.1) */
+        html { transition: font-size 0.3s ease; font-size: 16px; }
+        html.zoom-large { font-size: 18.5px; }
+        html.zoom-xlarge { font-size: 21px; }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .app-shell {
+            max-width: 430px; 
+            margin: 0 auto;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        .brand-font {
+            font-family: 'Playfair Display', serif;
+            background: linear-gradient(135deg, #880E4F 0%, #D81B60 50%, #F06292 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-style: italic;
+        }
+
+        .glass-header {
+            background: linear-gradient(135deg, #fce4ec 0%, #f8bbd0 100%);
+            border-radius: 0 0 32px 32px;
+            box-shadow: 0 8px 24px rgba(240, 98, 146, 0.12);
+            padding-top: calc(2rem + env(safe-area-inset-top));
+        }
+
+        .order-card {
+            background: white;
+            border-radius: 24px;
+            border: 1px solid rgba(240, 98, 146, 0.1);
+            box-shadow: 0 4px 12px rgba(240, 98, 146, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .order-card.expanded {
+            border-color: var(--primary);
+            box-shadow: 0 12px 24px rgba(240, 98, 146, 0.15);
+        }
+
+        .order-card.concluded {
+            opacity: 0.8;
+            background: #F8FAFC;
+            border-style: solid;
+            border-color: #E2E8F0;
+        }
+
+        .month-header {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: var(--bg);
+            padding: 16px 0 8px 0;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-size: 0.75rem; 
+            color: var(--primary-dark);
+            backdrop-blur: 8px;
+        }
+
+        .fab-main {
+            box-shadow: 0 6px 20px rgba(240, 98, 146, 0.4);
+            border-radius: 20px;
+            width: 64px;
+            height: 64px;
+            bottom: calc(2rem + env(safe-area-inset-bottom));
+        }
+
+        #splash {
+            background: var(--bg);
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.6s ease;
+        }
+
+        .pulse { animation: pulse-animation 2s infinite; }
+        @keyframes pulse-animation {
+            0% { transform: scale(0.9); opacity: 0.4; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(0.9); opacity: 0.4; }
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        .card-details {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out, opacity 0.3s ease;
+            opacity: 0;
+        }
+
+        .expanded .card-details {
+            max-height: 2500px;
+            opacity: 1;
+            padding-top: 1rem;
+        }
+
+        /* Layout do Recibo Profissional */
+        #receiptArea {
+            background: white;
+            width: 380px;
+            padding: 40px;
+            color: #3D0A1B;
+        }
+        .receipt-line {
+            border-bottom: 1px dashed #FCE4EC;
+            padding: 8px 0;
+        }
+
+        /* Botões de Ação */
+        .btn-icon-sm {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-concluir {
+            height: auto;
+            min-height: 42px;
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 0.6875rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            text-align: center;
+        }
+
+        /* Custom Toast */
+        #customToast {
+            position: fixed;
+            top: env(safe-area-inset-top);
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: #3D0A1B;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 12px;
+            z-index: 200;
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        #customToast.show { transform: translateX(-50%) translateY(20px); }
+
+        .address-section {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 18px;
+            transition: all 0.3s ease;
+        }
+
+        /* Estilo de Observações */
+        .obs-box {
+            background: #FFF9C4;
+            border-left: 4px solid #FBC02D;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #5D4037;
+        }
+        
+        .cep-loading { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* Estilos Multi-Itens */
+        .item-block {
+            background: #FDF2F5;
+            border: 1px solid #FCE4EC;
+            border-radius: 20px;
+            padding: 16px;
+            position: relative;
+            margin-bottom: 12px;
+        }
+        .item-number {
+            position: absolute;
+            top: -10px;
+            left: 15px;
+            background: var(--primary);
+            color: white;
+            font-size: 0.625rem;
+            font-weight: 900;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+        .btn-remove-item {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #E57373;
+        }
+
+        /* Gráfico de Barras Customizado */
+        .chart-bar {
+            width: 40px;
+            background: linear-gradient(to top, var(--primary-dark), var(--primary));
+            border-radius: 8px 8px 0 0;
+            transition: height 1s ease-out;
+            position: relative;
+        }
+        .chart-label {
+            font-size: 0.5rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: #D81B60;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <div id="customToast">Aviso rápido aqui!</div>
+
+    <div class="app-shell pb-24">
+        <!-- Splash Screen -->
+        <div id="splash">
+            <div class="w-24 h-24 bg-pink-100 rounded-[36px] flex items-center justify-center pulse">
+                <i data-lucide="flower" class="w-12 h-12 text-[#F06292]"></i>
+            </div>
+            <h2 class="mt-8 brand-font text-3xl">Cindy Artes</h2>
+        </div>
+
+        <!-- Header Principal -->
+        <header class="glass-header pb-8 px-6">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold brand-font">Cindy Artes Agenda</h1>
+                    <span class="text-[0.625rem] font-bold opacity-30 tracking-widest uppercase">Versão CAA.23.05#1.1</span>
+                </div>
+                <div class="bg-white/90 backdrop-blur px-4 py-2 rounded-2xl flex items-center gap-2 shadow-sm">
+                    <span id="orderCount" class="text-lg font-black text-pink-600 leading-none">0</span>
+                    <span class="text-[0.625rem] font-bold uppercase text-pink-400">Ativos</span>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <div class="relative flex-1">
+                    <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-pink-300"></i>
+                    <input type="text" id="searchInput" placeholder="Buscar cliente ou produto..." 
+                        class="w-full bg-white/80 border-none rounded-2xl py-4 pl-12 pr-4 shadow-inner outline-none text-sm transition-all focus:bg-white">
+                </div>
+                <!-- NOVO BOTÃO DE ZOOM -->
+                <button onclick="openFontModal()" class="w-14 h-14 bg-white/80 rounded-2xl flex items-center justify-center text-pink-500 shadow-inner active:scale-90 transition-transform">
+                    <i data-lucide="a-large-small" class="w-6 h-6"></i>
+                </button>
+                <button onclick="openExportModal()" class="w-14 h-14 bg-white/80 rounded-2xl flex items-center justify-center text-pink-500 shadow-inner active:scale-90 transition-transform">
+                    <i data-lucide="clipboard-list" class="w-6 h-6"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Filtros -->
+        <div class="px-6 flex gap-3 overflow-x-auto no-scrollbar my-6 items-center">
+            <button onclick="changeView('list', 'Todos')" class="nav-chip px-6 py-3 rounded-2xl text-[0.6875rem] font-extrabold whitespace-nowrap bg-pink-500 text-white shadow-md">Todos</button>
+            <button onclick="changeView('list', 'Pendente')" class="nav-chip px-6 py-3 rounded-2xl text-[0.6875rem] font-extrabold whitespace-nowrap bg-white border border-pink-50 text-pink-300">Pendentes</button>
+            <button onclick="changeView('list', 'Urgente')" class="nav-chip px-6 py-3 rounded-2xl text-[0.6875rem] font-extrabold whitespace-nowrap bg-white border border-pink-50 text-orange-400">Urgentes</button>
+            <button onclick="changeView('list', 'Concluído')" class="nav-chip px-6 py-3 rounded-2xl text-[0.6875rem] font-extrabold whitespace-nowrap bg-white border border-pink-50 text-blue-500">Concluídos</button>
+            <button onclick="changeView('stats', '')" class="nav-chip px-6 py-3 rounded-2xl text-[0.6875rem] font-extrabold whitespace-nowrap bg-white border border-pink-50 text-blue-400 flex items-center gap-2">
+                <i data-lucide="bar-chart-3" class="w-4 h-4 flex-shrink-0"></i> Estatísticas
+            </button>
+        </div>
+
+        <!-- Main Content -->
+        <main id="mainContainer" class="px-6 space-y-5">
+            <!-- Render via JS -->
+        </main>
+
+        <!-- FAB -->
+        <button onclick="openFormModal()" class="fab-main fixed right-6 bg-[#F06292] text-white flex items-center justify-center transition-transform hover:scale-105 active:scale-90 z-40">
+            <i data-lucide="plus" class="w-10 h-10"></i>
+        </button>
+    </div>
+
+    <!-- MODAL FONTES (Fase 1.1) -->
+    <div id="fontModal" class="fixed inset-0 bg-black/80 z-[100] hidden flex items-center justify-center p-6 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-xs rounded-[40px] p-8 shadow-2xl text-center">
+            <div class="w-16 h-16 bg-pink-50 text-pink-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                <i data-lucide="type" class="w-8 h-8"></i>
+            </div>
+            <h3 class="font-extrabold text-xl mb-6 text-pink-900">Tamanho da Letra</h3>
+            <div class="space-y-3">
+                <button onclick="setFontSize('normal')" class="w-full py-4 rounded-2xl border border-pink-100 bg-white font-bold text-sm text-gray-700 active:bg-pink-50">Padrão</button>
+                <button onclick="setFontSize('large')" class="w-full py-4 rounded-2xl border border-pink-100 bg-white font-bold text-base text-gray-700 active:bg-pink-50">Grande</button>
+                <button onclick="setFontSize('xlarge')" class="w-full py-4 rounded-2xl border border-pink-100 bg-white font-black text-lg text-gray-700 active:bg-pink-50 shadow-sm shadow-pink-100">Extra Grande</button>
+            </div>
+            <button onclick="closeFontModal()" class="mt-6 w-full bg-gray-50 text-gray-400 py-4 rounded-2xl font-black text-[0.6875rem] uppercase">Voltar</button>
+        </div>
+    </div>
+
+    <!-- Modal Formulário Multi-Produtos (Corrigido iPhone Bug) -->
+    <!-- Adicionado overscroll-contain para iPhone 14 -->
+    <div id="orderModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <!-- Alterado overflow e adicionado flex-col para cabeçalho sticky -->
+        <div class="bg-white w-full max-w-md rounded-[40px] px-6 sm:px-8 pb-8 pt-4 shadow-2xl max-h-[92vh] overflow-y-auto no-scrollbar overscroll-contain relative">
+            
+            <!-- Cabeçalho Sticky do Modal (Nunca some da tela) -->
+            <div class="sticky top-0 bg-white z-20 pb-4 pt-2 border-b border-pink-50/50 mb-6 flex justify-between items-center">
+                <h3 id="modalTitle" class="text-xl sm:text-2xl font-black brand-font text-pink-900 leading-tight">Novo Registro</h3>
+                <button type="button" onclick="closeOrderModal()" class="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+            
+            <form id="orderForm" class="space-y-6">
+                <input type="hidden" id="editId">
+                
+                <!-- Dados Básicos Cliente -->
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="col-span-1">
+                            <label class="text-[0.6875rem] font-extrabold text-pink-400 uppercase ml-2 mb-2 block">Cliente:</label>
+                            <input type="text" id="clientName" placeholder="Nome" required class="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none text-base">
+                        </div>
+                        <div class="col-span-1">
+                            <label class="text-[0.6875rem] font-extrabold text-pink-400 uppercase ml-2 mb-2 block">WhatsApp:</label>
+                            <input type="tel" id="clientWhatsApp" placeholder="(00) 00000" class="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none text-base">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-[0.6875rem] font-extrabold text-pink-400 uppercase ml-2 mb-2 block">Prazo Entrega:</label>
+                        <input type="date" id="deliveryDate" required class="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none text-sm font-bold">
+                    </div>
+                </div>
+
+                <!-- Carrinho de Itens -->
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center px-2 flex-wrap gap-y-3">
+                        <label class="text-[0.6875rem] font-black text-pink-900 uppercase tracking-wider">Produtos do Pedido</label>
+                        <!-- Ajustado para flex-wrap e não estourar com zoom -->
+                        <button type="button" onclick="addItemToForm()" class="flex items-center justify-center gap-1 text-[0.625rem] font-black text-white bg-pink-500 px-4 py-2 rounded-2xl shadow-sm h-auto min-h-[36px] flex-wrap text-center active:scale-95 transition-transform">
+                            <i data-lucide="plus" class="w-3 h-3 flex-shrink-0"></i> <span>ADICIONAR PRODUTO</span>
+                        </button>
+                    </div>
+                    
+                    <div id="itemsContainer" class="space-y-4">
+                        <!-- Itens renderizados via JS -->
+                    </div>
+
+                    <div class="bg-gray-900 text-white p-5 rounded-[28px] flex justify-between items-center shadow-lg">
+                        <span class="text-[0.625rem] font-black uppercase opacity-60">Total do Pedido</span>
+                        <div class="text-right">
+                            <span class="text-[0.625rem] font-bold block opacity-40">R$</span>
+                            <span id="displayTotal" class="text-2xl font-black">0,00</span>
+                            <input type="hidden" id="orderValue" value="0">
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[0.6875rem] font-extrabold text-pink-400 uppercase ml-2 mb-2 block">Observações Gerais:</label>
+                    <textarea id="observations" rows="2" placeholder="Informações adicionais do pedido completo..." class="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none text-sm no-scrollbar resize-none"></textarea>
+                </div>
+
+                <!-- Entrega -->
+                <div class="address-section overflow-hidden">
+                    <button type="button" onclick="toggleAddressForm()" class="w-full p-4 flex justify-between items-center text-slate-600">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="truck" class="w-5 h-5 text-pink-500 flex-shrink-0"></i>
+                            <span class="text-[0.6875rem] font-extrabold uppercase">Logística de Entrega</span>
+                        </div>
+                        <i data-lucide="chevron-down" id="addressChevron" class="w-5 h-5 transition-transform flex-shrink-0"></i>
+                    </button>
+                    <div id="addressFields" class="hidden p-4 pt-0 space-y-4">
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="col-span-2 relative">
+                                <label class="text-[0.625rem] font-bold text-gray-400 uppercase ml-1 mb-1 block">CEP:</label>
+                                <input type="text" id="addrCep" maxlength="9" placeholder="00000-000" oninput="handleCepInput(this)" class="w-full bg-white border border-gray-100 rounded-xl p-3 text-sm">
+                                <div id="cepLoader" class="absolute right-3 top-[34px] hidden"><i data-lucide="loader-2" class="w-4 h-4 text-pink-500 cep-loading"></i></div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="col-span-2">
+                                <label class="text-[0.625rem] font-bold text-gray-400 uppercase ml-1 mb-1 block">Rua:</label>
+                                <input type="text" id="addrStreet" placeholder="Rua" class="w-full bg-white border border-gray-100 rounded-xl p-3 text-sm">
+                            </div>
+                            <div>
+                                <label class="text-[0.625rem] font-bold text-gray-400 uppercase ml-1 mb-1 block">Nº:</label>
+                                <input type="text" id="addrNumber" placeholder="123" class="w-full bg-white border border-gray-100 rounded-xl p-3 text-sm">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[0.625rem] font-bold text-gray-400 uppercase ml-1 mb-1 block">Bairro:</label>
+                                <input type="text" id="addrNeighborhood" placeholder="Bairro" class="w-full bg-white border border-gray-100 rounded-xl p-3 text-sm">
+                            </div>
+                            <div>
+                                <label class="text-[0.625rem] font-bold text-gray-400 uppercase ml-1 mb-1 block">Cidade/UF:</label>
+                                <input type="text" id="addrCity" placeholder="Cidade - UF" class="w-full bg-white border border-gray-100 rounded-xl p-3 text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[0.625rem] font-bold text-gray-400 uppercase ml-1 mb-1 block">Ponto de Referência:</label>
+                            <input type="text" id="addrReference" placeholder="Opcional" class="w-full bg-white border border-gray-100 rounded-xl p-3 text-sm">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4 bg-pink-50 p-5 rounded-[28px] border border-pink-100/50">
+                    <div id="iconPreview" class="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-pink-500 shadow-sm flex-shrink-0">
+                        <i data-lucide="smile" id="selectedIcon" class="w-8 h-8"></i>
+                    </div>
+                    <button type="button" onclick="openIconPicker()" class="text-[0.6875rem] font-extrabold uppercase text-pink-500 bg-white px-4 py-3 rounded-xl border border-pink-50 h-auto min-h-[44px]">Ícone Global</button>
+                    <input type="hidden" id="iconName" value="smile">
+                </div>
+
+                <button type="submit" id="submitBtn" class="w-full bg-[#F06292] text-white py-5 rounded-3xl font-black text-lg shadow-lg shadow-pink-100 active:scale-95 transition-transform h-auto">Salvar Agenda</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Datalist para Tipos de Produto -->
+    <datalist id="productTypes">
+        <option value="Toalhinha"></option>
+        <option value="Toalha de Banho"></option>
+    </datalist>
+
+    <!-- Modal Recibo Multi-Item -->
+    <div id="receiptModal" class="fixed inset-0 bg-black/90 z-[100] hidden flex flex-col items-center justify-center p-6 backdrop-blur-md overflow-y-auto">
+        <div id="receiptContainer" class="shadow-2xl mb-8">
+            <div id="receiptArea">
+                <div class="text-center mb-8">
+                    <h2 class="brand-font text-4xl mb-1 text-pink-900">Cindy Artes</h2>
+                    <div class="w-12 h-1 bg-pink-200 mx-auto mb-2"></div>
+                    <p class="text-[0.5625rem] uppercase font-black tracking-[5px] text-pink-300">Recibo de Pedido</p>
+                </div>
+                
+                <div class="space-y-4">
+                    <div class="flex justify-between items-end border-b border-pink-50 pb-2">
+                        <span class="text-[0.5625rem] font-black text-pink-300 uppercase">Cliente:</span>
+                        <span id="recClient" class="font-bold text-base text-pink-900"></span>
+                    </div>
+
+                    <!-- Tabela de Itens no Recibo -->
+                    <div>
+                        <div class="grid grid-cols-12 gap-2 text-[0.5rem] font-black text-pink-300 uppercase mb-2">
+                            <div class="col-span-6">Descrição</div>
+                            <div class="col-span-3 text-center">Cor</div>
+                            <div class="col-span-3 text-right">Valor</div>
+                        </div>
+                        <div id="recItemsList" class="space-y-2 border-t border-b border-pink-50 py-3">
+                            <!-- Injetado via JS -->
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-end">
+                        <span class="text-[0.5625rem] font-black text-pink-300 uppercase">Previsão:</span>
+                        <span id="recDate" class="font-black text-sm text-pink-600"></span>
+                    </div>
+                    
+                    <div class="pt-4 flex justify-between items-center bg-pink-50/30 p-4 rounded-2xl">
+                        <span class="text-[0.625rem] font-black text-pink-400 uppercase">Total Geral:</span>
+                        <span id="recTotal" class="font-black text-2xl text-pink-900"></span>
+                    </div>
+                </div>
+                
+                <div class="mt-10 text-center">
+                    <p class="italic text-[0.625rem] text-pink-300 mb-6">Feito com carinho para você!</p>
+                    <div class="border-t border-pink-50 pt-4 text-[0.4375rem] text-gray-300 uppercase tracking-widest">
+                        Documento Gerado em <span id="recNow"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex flex-wrap justify-center gap-4 w-full max-w-sm">
+            <button onclick="closeReceipt()" class="bg-white/10 text-white px-8 py-4 rounded-2xl font-bold text-[0.6875rem] uppercase border border-white/20">Sair</button>
+            <button onclick="downloadReceipt()" class="bg-pink-500 text-white px-8 py-4 rounded-2xl font-black text-[0.6875rem] uppercase shadow-lg">Salvar JPG</button>
+        </div>
+    </div>
+
+    <!-- Modal Exportar / Ícone / Confirmar -->
+    <div id="exportModal" class="fixed inset-0 bg-black/80 z-[100] hidden flex items-center justify-center p-6 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-md rounded-[40px] p-8 shadow-2xl flex flex-col h-[70vh]">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-black brand-font">Agenda Offline</h3>
+                <button onclick="closeExportModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+            <textarea id="exportText" class="flex-1 bg-gray-50 border-none rounded-3xl p-5 text-[0.6875rem] font-mono text-gray-600 outline-none resize-none mb-6 no-scrollbar" readonly></textarea>
+            <button onclick="copyExportList()" class="w-full bg-pink-500 text-white py-5 rounded-2xl font-black text-sm uppercase shadow-md">Copiar Tudo</button>
+        </div>
+    </div>
+
+    <div id="iconPickerModal" class="fixed inset-0 bg-white z-[60] hidden flex flex-col p-8">
+        <header class="flex justify-between items-center mb-6">
+            <h3 class="text-2xl font-black brand-font">Símbolos</h3>
+            <button onclick="closeIconPicker()" class="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center flex-shrink-0"><i data-lucide="x" class="w-6 h-6"></i></button>
+        </header>
+        <input type="text" id="iconSearch" oninput="renderIcons()" placeholder="Procurar tema..." class="w-full bg-gray-100 rounded-2xl p-5 mb-6 outline-none text-base">
+        <div id="iconGrid" class="grid grid-cols-4 gap-4 overflow-y-auto no-scrollbar pb-12"></div>
+    </div>
+
+    <div id="confirmModal" class="fixed inset-0 bg-black/70 z-[70] hidden flex items-center justify-center p-6 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-xs rounded-[40px] p-10 text-center">
+            <div class="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                <i data-lucide="trash-2" class="w-10 h-10"></i>
+            </div>
+            <h3 class="font-extrabold text-xl">Remover Pedido?</h3>
+            <div class="flex gap-3 mt-8">
+                <button onclick="closeConfirmModal()" class="flex-1 py-4 rounded-2xl bg-gray-50 font-extrabold text-xs uppercase text-gray-400">Não</button>
+                <button id="confirmBtn" class="flex-1 py-4 rounded-2xl bg-red-500 text-white font-extrabold text-xs uppercase">Sim</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, deleteDoc, doc, updateDoc, Timestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBFXCai8P-fQsL1Rk2I-zT4Q4B52Izt0tg",
+            authDomain: "cindy-artes-agenda.firebaseapp.com",
+            projectId: "cindy-artes-agenda",
+            storageBucket: "cindy-artes-agenda.firebasestorage.app",
+            messagingSenderId: "817940772584",
+            appId: "1:817940772584:web:fc5a2288df07ea3732fb5d"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const ordersCol = collection(db, "orders");
+
+        let allOrders = [];
+        let currentFilter = 'Todos';
+        let currentView = 'list';
+        let statsPeriod = 'Este Mês';
+
+        const iconList = [
+            "shield", "zap", "sword", "crown", "rocket", "target", "gem", "flame", "skull", "trophy",
+            "tree-pine", "leaf", "flower", "flower-2", "sprout",
+            "dog", "cat", "rabbit", "bear", "mouse", "bug", "snail", "squirrel", "piggy-bank", "bone",
+            "fish", "bird", "butterfly", "shell", "egg", "feather", "waves", "shrimp", "cloud-lightning", "wind",
+            "cake", "ice-cream", "candy", "lollipop", "cherry",
+            "cpu", "smartphone", "monitor", "wifi", "battery-charging",
+            "heart", "heart-handshake", "gift", "smile", "party-popper"
+        ];
+
+        // Lógica do Zoom de Acessibilidade
+        window.openFontModal = () => document.getElementById('fontModal').classList.remove('hidden');
+        window.closeFontModal = () => document.getElementById('fontModal').classList.add('hidden');
+        window.setFontSize = (size) => {
+            const html = document.documentElement;
+            html.classList.remove('zoom-large', 'zoom-xlarge');
+            if (size === 'large') html.classList.add('zoom-large');
+            if (size === 'xlarge') html.classList.add('zoom-xlarge');
+            localStorage.setItem('caa_fontsize', size);
+            window.closeFontModal();
+        };
+
+        const savedFontSize = localStorage.getItem('caa_fontsize');
+        if (savedFontSize) window.setFontSize(savedFontSize);
+
+        onSnapshot(query(ordersCol, orderBy("createdAt", "desc")), (snap) => {
+            allOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            render();
+            const s = document.getElementById('splash');
+            if(s) { s.style.opacity = '0'; setTimeout(() => s.remove(), 600); }
+        });
+
+        function getItemsArray(o) {
+            if (o.items && Array.isArray(o.items)) return o.items;
+            return [{
+                type: 'Produto',
+                text: o.embroideryText || 'Bordado',
+                color: o.towelColorName || 'Padrão',
+                theme: o.themeText || '-',
+                value: parseFloat(o.orderValue || 0)
+            }];
+        }
+
+        window.render = () => {
+            const container = document.getElementById('mainContainer');
+            if (currentView === 'stats') { renderStats(container); return; }
+
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            let filtered = allOrders.filter(o => {
+                const items = getItemsArray(o);
+                const matchClient = (o.clientName || "").toLowerCase().includes(search);
+                const matchItems = items.some(item => 
+                    (item.text || "").toLowerCase().includes(search) || 
+                    (item.theme || "").toLowerCase().includes(search) ||
+                    (item.type || "").toLowerCase().includes(search)
+                );
+                return matchClient || matchItems;
+            });
+
+            if (currentFilter !== 'Todos') {
+                if (currentFilter === 'Urgente') {
+                    filtered = filtered.filter(o => {
+                        const urg = getUrgency(o).type;
+                        return (urg === 'critical' || urg === 'urgent') && o.status !== 'Concluído';
+                    });
+                } else { 
+                    filtered = filtered.filter(o => o.status === currentFilter); 
+                }
+            }
+
+            document.getElementById('orderCount').innerText = allOrders.filter(o => o.status !== 'Concluído').length;
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="text-center py-20 opacity-20"><i data-lucide="search" class="w-12 h-12 mx-auto mb-4"></i><p class="text-sm font-bold uppercase tracking-widest text-center">Nenhum registro</p></div>`;
+                lucide.createIcons(); return;
+            }
+
+            const groups = {};
+            filtered.forEach(o => {
+                const deliveryDate = new Date(o.deliveryDate + "T12:00:00");
+                const monthYear = deliveryDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                const groupKey = deliveryDate.getFullYear() * 100 + deliveryDate.getMonth();
+                if (!groups[groupKey]) groups[groupKey] = { label: monthYear, orders: [] };
+                groups[groupKey].orders.push(o);
+            });
+
+            const sortedKeys = Object.keys(groups).sort((a, b) => b - a);
+
+            container.innerHTML = sortedKeys.map(key => {
+                const group = groups[key];
+                const monthOrders = group.orders.sort((a, b) => {
+                    if (a.status === 'Concluído' && b.status !== 'Concluído') return 1;
+                    if (a.status !== 'Concluído' && b.status === 'Concluído') return -1;
+                    return 0;
+                });
+
+                return `
+                    <section class="mb-8">
+                        <div class="month-header">Agenda de ${group.label}</div>
+                        <div class="space-y-4 mt-3">
+                            ${monthOrders.map(o => renderOrderCard(o)).join('')}
+                        </div>
+                    </section>
+                `;
+            }).join('');
+            lucide.createIcons();
+        };
+
+        function renderOrderCard(o) {
+            const urgency = getUrgency(o);
+            const isDone = o.status === 'Concluído';
+            const hasDelivery = o.addrStreet || o.addrNeighborhood || o.addrCep;
+            const items = getItemsArray(o);
+            
+            return `
+                <div id="card-${o.id}" class="order-card p-6 flex flex-col ${isDone ? 'concluded' : ''}" onclick="toggleCard('${o.id}')">
+                    <div class="flex justify-between items-center gap-2">
+                        <div class="flex items-center gap-4 min-w-0 flex-1">
+                            <div class="w-14 h-14 bg-pink-50 rounded-2xl flex-shrink-0 flex items-center justify-center text-pink-500 border border-white">
+                                <i data-lucide="${o.iconName || 'smile'}" class="w-8 h-8"></i>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <h4 class="font-black text-lg text-pink-900 leading-tight break-words">${o.clientName}</h4>
+                                    ${isDone ? '<i data-lucide="check-circle-2" class="w-4 h-4 text-blue-500 flex-shrink-0"></i>' : ''}
+                                    ${hasDelivery ? `<button onclick="event.stopPropagation(); showToast('Pedido para entrega/correios 🚚')" class="text-blue-500 animate-bounce flex-shrink-0"><i data-lucide="truck" class="w-4 h-4"></i></button>` : ''}
+                                </div>
+                                <p class="text-[0.625rem] font-black text-gray-400 uppercase tracking-widest mt-1">
+                                    ${items.length} ${items.length === 1 ? 'Produto' : 'Produtos'} • R$ ${parseFloat(o.orderValue || 0).toFixed(2)}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex flex-col items-end gap-2 flex-shrink-0">
+                             <span class="px-3 py-1.5 rounded-xl text-[0.625rem] font-black uppercase tracking-wider text-center ${urgency.bg} ${urgency.text}">${urgency.label}</span>
+                             <i data-lucide="chevron-down" class="w-4 h-4 text-pink-200 transition-transform chevron-card"></i>
+                        </div>
+                    </div>
+
+                    <div class="card-details">
+                        <div class="space-y-3 bg-gray-50/70 rounded-3xl p-5 border border-gray-100 mt-4">
+                            <div class="space-y-2">
+                                <p class="text-[0.5625rem] font-black text-pink-300 uppercase px-1">Detalhamento:</p>
+                                ${items.map((it, idx) => `
+                                    <div class="bg-white p-3 rounded-xl shadow-sm border border-pink-50">
+                                        <div class="flex justify-between items-start gap-2">
+                                            <div class="min-w-0">
+                                                <span class="block text-[0.5rem] font-black text-pink-300 uppercase mb-0.5 break-words">${it.type || 'Produto'}</span>
+                                                <span class="font-bold text-sm text-pink-900 break-words block">${it.text}</span>
+                                            </div>
+                                            <span class="font-black text-xs text-pink-500 flex-shrink-0">R$ ${parseFloat(it.value || 0).toFixed(2)}</span>
+                                        </div>
+                                        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-[0.625rem] font-bold text-gray-400 uppercase">
+                                            <span>Cor: ${it.color}</span>
+                                            <span>Tema: ${it.theme}</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+
+                            ${o.observations ? `<div class="obs-box mt-2"><p class="text-[0.5625rem] font-black uppercase mb-1">Nota:</p>${o.observations}</div>` : ''}
+
+                            ${hasDelivery ? `
+                            <div class="flex gap-3 pt-2 mt-2 border-t border-gray-200/50">
+                                <span class="text-[0.625rem] font-black uppercase text-blue-400 w-16 flex-shrink-0">Logística:</span>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-semibold text-gray-600 break-words">${o.addrStreet || ''}, ${o.addrNumber || 'S/N'}</p>
+                                    <p class="text-[0.6875rem] text-gray-400 break-words">${o.addrNeighborhood || ''} - ${o.addrCity || ''}</p>
+                                    ${o.addrCep ? `<p class="text-[0.625rem] font-black text-blue-300 mt-0.5">CEP: ${o.addrCep}</p>` : ''}
+                                    <div class="flex flex-wrap gap-2 mt-3">
+                                        <button onclick="event.stopPropagation(); openMapForOrder('${o.id}')" class="flex items-center justify-center gap-1.5 text-blue-500 text-[0.625rem] font-black uppercase bg-blue-50 px-3 py-2 rounded-lg flex-1">
+                                            <i data-lucide="map-pin" class="w-3 h-3 flex-shrink-0"></i> Abrir no Mapa
+                                        </button>
+                                        <button onclick="event.stopPropagation(); copyAddress('${o.id}')" class="flex items-center justify-center gap-1.5 text-slate-500 text-[0.625rem] font-black uppercase bg-slate-100 px-3 py-2 rounded-lg flex-1">
+                                            <i data-lucide="copy" class="w-3 h-3 flex-shrink-0"></i> Copiar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>` : ''}
+                            
+                            <div class="flex justify-end items-center mt-2 pt-2 border-t border-gray-200/50 text-pink-300">
+                                <i data-lucide="calendar" class="w-4 h-4 mr-2 flex-shrink-0"></i>
+                                <span class="text-sm font-black">${new Date(o.deliveryDate + "T12:00:00").toLocaleDateString('pt-BR')}</span>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end items-center flex-wrap gap-3 mt-5" onclick="event.stopPropagation()">
+                            <button onclick="confirmDelete('${o.id}')" class="btn-icon-sm bg-red-50 text-red-300"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                            <button onclick="editOrder('${o.id}')" class="btn-icon-sm bg-blue-50 text-blue-300"><i data-lucide="pencil" class="w-5 h-5"></i></button>
+                            <button onclick="showReceipt('${o.id}')" class="btn-icon-sm bg-pink-50 text-pink-300"><i data-lucide="file-text" class="w-5 h-5"></i></button>
+                            <button onclick="toggleStatus('${o.id}', '${o.status}')" class="btn-concluir flex-1 sm:flex-none ${isDone ? 'bg-gray-200 text-gray-500' : 'bg-pink-500 text-white shadow-md'} active:scale-95">
+                                ${isDone ? 'Reabrir' : 'Concluir'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.addItemToForm = (data = null) => {
+            const container = document.getElementById('itemsContainer');
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'item-block';
+            const count = container.children.length + 1;
+            
+            itemDiv.innerHTML = `
+                <div class="item-number">PRODUTO ${count}</div>
+                <button type="button" onclick="this.parentElement.remove(); updateOrderTotal();" class="btn-remove-item">
+                    <i data-lucide="trash-2" class="w-5 h-5"></i>
+                </button>
+                <div class="space-y-3 mt-4">
+                    <div>
+                        <label class="text-[0.5625rem] font-black text-pink-300 uppercase ml-1 block mb-1">Tipo de Produto (Opcional):</label>
+                        <input type="text" list="productTypes" placeholder="Ex: Toalhinha" class="item-type w-full bg-white rounded-xl p-3 text-sm outline-none border border-pink-50 mb-3" value="${data?.type || ''}">
+                        
+                        <label class="text-[0.5625rem] font-black text-pink-300 uppercase ml-1 block mb-1">Texto para Bordar:</label>
+                        <input type="text" placeholder="O que vai escrito?" required class="item-text w-full bg-white rounded-xl p-3 text-sm outline-none border border-pink-50 font-bold" value="${data?.text || ''}">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[0.5625rem] font-black text-pink-300 uppercase ml-1 block mb-1">Cor:</label>
+                            <input type="text" placeholder="Cor" class="item-color w-full bg-white rounded-xl p-3 text-sm outline-none border border-pink-50" value="${data?.color || ''}">
+                        </div>
+                        <div>
+                            <label class="text-[0.5625rem] font-black text-pink-300 uppercase ml-1 block mb-1">Tema:</label>
+                            <input type="text" placeholder="Tema" class="item-theme w-full bg-white rounded-xl p-3 text-sm outline-none border border-pink-50" value="${data?.theme || ''}">
+                        </div>
+                    </div>
+                    <div class="relative">
+                        <label class="text-[0.5625rem] font-black text-pink-300 uppercase ml-1 block mb-1">Valor Unitário:</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[0.625rem] font-black text-pink-300">R$</span>
+                            <input type="number" step="0.01" placeholder="0.00" oninput="updateOrderTotal()" class="item-value w-full bg-white rounded-xl p-3 pl-8 text-sm outline-none border border-pink-50 font-black text-pink-600" value="${data?.value || ''}">
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(itemDiv);
+            lucide.createIcons();
+            updateOrderTotal();
+        };
+
+        window.updateOrderTotal = () => {
+            const values = document.querySelectorAll('.item-value');
+            let total = 0;
+            values.forEach(v => total += parseFloat(v.value || 0));
+            document.getElementById('displayTotal').innerText = total.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+            document.getElementById('orderValue').value = total;
+        };
+
+        const form = document.getElementById('orderForm');
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            const b = document.getElementById('submitBtn'); 
+            const id = document.getElementById('editId').value;
+            const items = [];
+            document.querySelectorAll('.item-block').forEach(block => {
+                items.push({
+                    type: block.querySelector('.item-type').value,
+                    text: block.querySelector('.item-text').value,
+                    color: block.querySelector('.item-color').value,
+                    theme: block.querySelector('.item-theme').value,
+                    value: parseFloat(block.querySelector('.item-value').value || 0)
+                });
+            });
+
+            if (items.length === 0) { showToast("Adicione ao menos um produto!"); return; }
+
+            b.disabled = true; b.innerText = "Sincronizando...";
+            const payload = { 
+                clientName: document.getElementById('clientName').value, 
+                clientWhatsApp: document.getElementById('clientWhatsApp').value,
+                deliveryDate: document.getElementById('deliveryDate').value, 
+                orderValue: parseFloat(document.getElementById('orderValue').value), 
+                items: items,
+                iconName: document.getElementById('iconName').value,
+                observations: document.getElementById('observations').value,
+                addrCep: document.getElementById('addrCep').value,
+                addrStreet: document.getElementById('addrStreet').value,
+                addrNumber: document.getElementById('addrNumber').value,
+                addrNeighborhood: document.getElementById('addrNeighborhood').value,
+                addrCity: document.getElementById('addrCity').value,
+                addrReference: document.getElementById('addrReference').value,
+            };
+            if (!id) { payload.status = 'Pendente'; payload.createdAt = Timestamp.now(); }
+            
+            try { 
+                if (id) await updateDoc(doc(db, "orders", id), payload); 
+                else await addDoc(ordersCol, payload); 
+                closeOrderModal(); 
+                showToast(id ? "Agenda Atualizada!" : "Novo Registro Gravado!");
+            } catch (err) { console.error(err); showToast("Erro de conexão."); } 
+            finally { b.disabled = false; b.innerText = "Salvar Agenda"; }
+        };
+
+        window.editOrder = (id) => {
+            const o = allOrders.find(x => x.id === id); 
+            if (!o) return;
+            document.getElementById('editId').value = o.id; 
+            document.getElementById('clientName').value = o.clientName || ''; 
+            document.getElementById('clientWhatsApp').value = o.clientWhatsApp || '';
+            document.getElementById('deliveryDate').value = o.deliveryDate || ''; 
+            document.getElementById('iconName').value = o.iconName || 'smile';
+            document.getElementById('observations').value = o.observations || '';
+            document.getElementById('addrCep').value = o.addrCep || '';
+            document.getElementById('addrStreet').value = o.addrStreet || '';
+            document.getElementById('addrNumber').value = o.addrNumber || '';
+            document.getElementById('addrNeighborhood').value = o.addrNeighborhood || '';
+            document.getElementById('addrCity').value = o.addrCity || '';
+            document.getElementById('addrReference').value = o.addrReference || '';
+            const container = document.getElementById('itemsContainer');
+            container.innerHTML = "";
+            const items = getItemsArray(o);
+            items.forEach(it => addItemToForm(it));
+            document.getElementById('modalTitle').innerText = "Editar Registro"; 
+            document.getElementById('selectedIcon').setAttribute('data-lucide', o.iconName || 'smile');
+            if(o.addrStreet || o.addrNeighborhood || o.addrCep) { 
+                document.getElementById('addressFields').classList.remove('hidden'); 
+                document.getElementById('addressChevron').style.transform = 'rotate(180deg)';
+            } else {
+                document.getElementById('addressFields').classList.add('hidden');
+                document.getElementById('addressChevron').style.transform = 'rotate(0deg)';
+            }
+            lucide.createIcons(); 
+            document.getElementById('orderModal').classList.remove('hidden');
+        };
+
+        window.showReceipt = (id) => {
+            const o = allOrders.find(x => x.id === id);
+            if (!o) return;
+            const items = getItemsArray(o);
+            document.getElementById('recClient').innerText = o.clientName;
+            document.getElementById('recDate').innerText = new Date(o.deliveryDate + "T12:00:00").toLocaleDateString('pt-BR');
+            document.getElementById('recTotal').innerText = `R$ ${parseFloat(o.orderValue || 0).toFixed(2)}`;
+            document.getElementById('recNow').innerText = new Date().toLocaleString('pt-BR');
+            const list = document.getElementById('recItemsList');
+            list.innerHTML = items.map(it => `
+                <div class="grid grid-cols-12 gap-2 text-[0.625rem] items-center">
+                    <div class="col-span-6">
+                        <p class="font-bold text-pink-900">${it.text}</p>
+                        <p class="text-[0.4375rem] text-gray-400 uppercase tracking-tighter">${it.type || 'Prod'} • ${it.theme}</p>
+                    </div>
+                    <div class="col-span-3 text-center text-[0.5rem] text-gray-500 font-bold uppercase">${it.color}</div>
+                    <div class="col-span-3 text-right font-black text-pink-600">R$ ${it.value.toFixed(2)}</div>
+                </div>
+            `).join('');
+            document.getElementById('receiptModal').classList.remove('hidden');
+        };
+
+        window.downloadReceipt = () => {
+            const element = document.getElementById('receiptArea');
+            html2canvas(element, { scale: 3 }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `Recibo_Cindy_${document.getElementById('recClient').innerText}.jpg`;
+                link.href = canvas.toDataURL('image/jpeg', 0.9);
+                link.click();
+            });
+        };
+
+        window.handleCepInput = async (input) => {
+            const cep = input.value.replace(/\D/g, '');
+            if (cep.length === 8) {
+                const loader = document.getElementById('cepLoader');
+                loader.classList.remove('hidden');
+                try {
+                    const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                    const data = await response.json();
+                    if (!data.erro) {
+                        document.getElementById('addrStreet').value = data.logradouro;
+                        document.getElementById('addrNeighborhood').value = data.bairro;
+                        document.getElementById('addrCity').value = `${data.localidade} - ${data.uf}`;
+                        showToast("Endereço localizado! ✨");
+                    }
+                } catch (e) {} finally { loader.classList.add('hidden'); }
+            }
+        };
+
+        window.copyAddress = (id) => {
+            const o = allOrders.find(x => x.id === id);
+            if (!o) return;
+            const text = `🚚 ENDEREÇO DE ENTREGA - CINDY ARTES\n` +
+                         `👤 CLIENTE: ${o.clientName}\n` +
+                         `📍 RUA: ${o.addrStreet || ''}, nº ${o.addrNumber || 'S/N'}\n` +
+                         `🏘️ BAIRRO: ${o.addrNeighborhood || ''}\n` +
+                         `🏙️ CIDADE: ${o.addrCity || ''}\n` +
+                         (o.addrCep ? `📮 CEP: ${o.addrCep}\n` : '') +
+                         (o.addrReference ? `💡 REF: ${o.addrReference}\n` : '');
+            
+            const textArea = document.createElement("textarea");
+            textArea.value = text; document.body.appendChild(textArea);
+            textArea.select(); document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showToast("Logística copiada! 🚚");
+        };
+
+        window.openMapForOrder = (id) => {
+            const o = allOrders.find(x => x.id === id);
+            if (!o) return;
+            const query = o.addrCep ? o.addrCep : `${o.addrStreet}, ${o.addrNumber}, ${o.addrCity}`;
+            window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`, '_blank');
+        };
+
+        function renderStats(container) {
+            const now = new Date();
+            const months = [];
+            for (let i = 3; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                months.push({
+                    month: d.getMonth(),
+                    year: d.getFullYear(),
+                    label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+                    total: 0
+                });
+            }
+
+            allOrders.filter(o => o.status === 'Concluído').forEach(o => {
+                const d = o.createdAt?.toDate() || new Date();
+                months.forEach(m => {
+                    if (d.getMonth() === m.month && d.getFullYear() === m.year) {
+                        m.total += parseFloat(o.orderValue || 0);
+                    }
+                });
+            });
+
+            const maxVal = Math.max(...months.map(m => m.total), 1);
+            
+            let filteredStats = allOrders.filter(o => {
+                const d = o.createdAt?.toDate() || new Date();
+                if (statsPeriod === 'Este Mês') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                if (statsPeriod === 'Mês Passado') {
+                    const lastM = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+                    const lastY = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+                    return d.getMonth() === lastM && d.getFullYear() === lastY;
+                }
+                return true;
+            });
+
+            const done = filteredStats.filter(o => o.status === 'Concluído');
+            const revenue = done.reduce((acc, o) => acc + (parseFloat(o.orderValue) || 0), 0);
+            const pendingRev = filteredStats.filter(o => o.status !== 'Concluído').reduce((acc, o) => acc + (parseFloat(o.orderValue) || 0), 0);
+            
+            container.innerHTML = `
+                <div class="space-y-6 animate-in slide-in-from-bottom duration-500">
+                    <div class="flex justify-between items-center px-1 flex-wrap gap-2">
+                        <h2 class="text-xl font-black text-pink-900 flex items-center gap-2"><i data-lucide="trending-up" class="w-5 h-5 text-pink-500 flex-shrink-0"></i> Performance</h2>
+                        <select onchange="updateStatsPeriod(this.value)" class="text-[0.625rem] font-bold uppercase bg-white border border-pink-100 rounded-xl px-3 py-2 outline-none text-pink-400">
+                            <option ${statsPeriod === 'Este Mês' ? 'selected' : ''}>Este Mês</option>
+                            <option ${statsPeriod === 'Mês Passado' ? 'selected' : ''}>Mês Passado</option>
+                            <option ${statsPeriod === 'Total' ? 'selected' : ''}>Total Geral</option>
+                        </select>
+                    </div>
+
+                    <div class="stats-card bg-white p-6 rounded-3xl border border-pink-50">
+                        <span class="text-[0.625rem] font-black uppercase text-gray-400 mb-6 block">Evolução de Vendas (4 meses)</span>
+                        <div class="flex justify-around items-end h-32 px-2">
+                            ${months.map(m => `
+                                <div class="flex flex-col items-center group">
+                                    <div class="text-[0.5rem] font-black text-pink-300 opacity-0 group-hover:opacity-100 mb-1">R$ ${m.total.toFixed(0)}</div>
+                                    <div class="chart-bar" style="height: ${(m.total / maxVal) * 80 + 5}px"></div>
+                                    <div class="chart-label">${m.label}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="stats-card bg-white p-6 rounded-3xl border border-pink-50">
+                            <span class="text-[0.625rem] font-black uppercase text-gray-400">Total Vendas</span>
+                            <div class="text-3xl font-black text-pink-600">${filteredStats.length}</div>
+                        </div>
+                        <div class="stats-card bg-white p-6 rounded-3xl border border-pink-50">
+                            <span class="text-[0.625rem] font-black uppercase text-gray-400">Concluídos</span>
+                            <div class="text-3xl font-black text-green-500">${done.length}</div>
+                        </div>
+                    </div>
+
+                    <div class="stats-card bg-white p-7 rounded-3xl border border-pink-50 border-l-8 border-l-pink-500 shadow-sm">
+                        <span class="text-[0.625rem] font-black uppercase text-gray-400">Receita Realizada</span>
+                        <div class="text-4xl font-black text-pink-900 break-all">R$ ${revenue.toFixed(2)}</div>
+                        <div class="mt-6 pt-4 border-t border-gray-50 flex justify-between gap-2">
+                            <span class="text-[0.625rem] font-bold text-gray-300 uppercase">A RECEBER:</span>
+                            <span class="text-[0.625rem] font-black text-gray-500">R$ ${pendingRev.toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>`;
+            lucide.createIcons();
+        }
+
+        window.updateStatsPeriod = (v) => { statsPeriod = v; render(); };
+
+        window.openExportModal = () => {
+            const active = allOrders.filter(o => o.status !== 'Concluído');
+            let list = "📅 CINDY ARTES - LISTA DE PEDIDOS ATUALIZADA\n";
+            list += "==============================================\n\n";
+            active.forEach((o, i) => {
+                const items = getItemsArray(o);
+                list += `PEDIDO #${i+1}\n`;
+                list += `👤 CLIENTE: ${o.clientName}\n`;
+                list += `📱 WHATSAPP: ${o.clientWhatsApp || '-'}\n`;
+                list += `📅 ENTREGA: ${new Date(o.deliveryDate + "T12:00:00").toLocaleDateString('pt-BR')}\n`;
+                list += `📦 PRODUTOS:\n`;
+                items.forEach(it => {
+                    list += `   - ${it.type || 'Prod'}: ${it.text}\n`;
+                    list += `     Cor: ${it.color} | Tema: ${it.theme} | R$ ${it.value.toFixed(2)}\n`;
+                });
+                if(o.addrStreet || o.addrCep) {
+                    list += `🚚 ENDEREÇO:\n`;
+                    list += `   ${o.addrStreet || ''}, ${o.addrNumber || 'S/N'}\n`;
+                    list += `   Bairro: ${o.addrNeighborhood || ''} - ${o.addrCity || ''}\n`;
+                    if(o.addrCep) list += `   CEP: ${o.addrCep}\n`;
+                    if(o.addrReference) list += `   REF: ${o.addrReference}\n`;
+                }
+                if(o.observations) list += `📝 OBS: ${o.observations}\n`;
+                list += `💰 TOTAL PEDIDO: R$ ${parseFloat(o.orderValue || 0).toFixed(2)}\n`;
+                list += `----------------------------------------------\n\n`;
+            });
+            document.getElementById('exportText').value = list;
+            document.getElementById('exportModal').classList.remove('hidden');
+        };
+
+        window.getUrgency = (o) => {
+            if (o.status === 'Concluído') return { type: 'done', label: 'Concluído', bg: 'bg-blue-500', text: 'text-white' };
+            const now = new Date(); now.setHours(0,0,0,0);
+            const delivery = new Date(o.deliveryDate + "T12:00:00");
+            const diffDays = Math.ceil((delivery - now) / (1000 * 60 * 60 * 24));
+            if (diffDays < 0) return { type: 'past', label: 'Atrasado', bg: 'bg-black', text: 'text-white' };
+            if (diffDays <= 2) return { type: 'critical', label: diffDays === 0 ? 'HOJE' : diffDays + ' Dias', bg: 'bg-red-600', text: 'text-white' };
+            const created = o.createdAt ? o.createdAt.toDate() : new Date();
+            const ratio = (delivery - now) / (delivery - created);
+            if (ratio < 0.5) return { type: 'warning', label: 'Prazo Próximo', bg: 'bg-orange-500', text: 'text-white' };
+            return { type: 'safe', label: 'No Prazo', bg: 'bg-green-500', text: 'text-white' };
+        };
+
+        window.toggleCard = (id) => {
+            const card = document.getElementById(`card-${id}`);
+            const allCards = document.querySelectorAll('.order-card');
+            allCards.forEach(c => { if(c !== card) c.classList.remove('expanded'); });
+            card.classList.toggle('expanded');
+        };
+
+        window.toggleAddressForm = () => {
+            const fields = document.getElementById('addressFields');
+            const chev = document.getElementById('addressChevron');
+            fields.classList.toggle('hidden');
+            chev.style.transform = fields.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+        };
+
+        window.showToast = (msg) => {
+            const t = document.getElementById('customToast');
+            t.innerText = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        };
+
+        window.closeOrderModal = () => document.getElementById('orderModal').classList.add('hidden');
+        window.openFormModal = () => { 
+            document.getElementById('orderForm').reset(); 
+            document.getElementById('itemsContainer').innerHTML = "";
+            addItemToForm(); 
+            document.getElementById('editId').value = ""; 
+            document.getElementById('displayTotal').innerText = "0,00";
+            document.getElementById('modalTitle').innerText = "Novo Registro"; 
+            document.getElementById('orderModal').classList.remove('hidden'); 
+        };
+
+        window.changeView = (v, f) => {
+            currentView = v; currentFilter = f;
+            document.querySelectorAll('.nav-chip').forEach(btn => {
+                const active = btn.innerText.includes(f) || (v === 'stats' && btn.innerText.includes('Estatísticas'));
+                btn.className = `nav-chip px-6 py-3 rounded-2xl text-[0.6875rem] font-extrabold transition-all ${active ? 'bg-pink-500 text-white shadow-md' : 'bg-white border border-pink-50 text-pink-300'}`;
+            });
+            render();
+        };
+
+        window.closeReceipt = () => document.getElementById('receiptModal').classList.add('hidden');
+        window.toggleStatus = async (id, s) => { await updateDoc(doc(db, "orders", id), { status: s === 'Concluído' ? 'Pendente' : 'Concluído' }); };
+        window.confirmDelete = (id) => { window.delId = id; document.getElementById('confirmModal').classList.remove('hidden'); };
+        window.closeConfirmModal = () => document.getElementById('confirmModal').classList.add('hidden');
+        document.getElementById('confirmBtn').onclick = async () => { await deleteDoc(doc(db, "orders", window.delId)); closeConfirmModal(); };
+        window.openIconPicker = () => { document.getElementById('iconPickerModal').classList.remove('hidden'); renderIcons(); };
+        window.closeIconPicker = () => document.getElementById('iconPickerModal').classList.add('hidden');
+        window.selectIcon = (n) => { document.getElementById('iconName').value = n; document.getElementById('selectedIcon').setAttribute('data-lucide', n); lucide.createIcons(); closeIconPicker(); };
+        window.renderIcons = () => {
+            const g = document.getElementById('iconGrid');
+            const s = document.getElementById('iconSearch').value.toLowerCase();
+            const c = document.getElementById('iconName').value;
+            g.innerHTML = iconList.filter(i => i.includes(s)).map(i => `<button type="button" onclick="selectIcon('${i}')" class="aspect-square bg-gray-50 rounded-2xl flex items-center justify-center border-2 ${c === i ? 'border-pink-500' : 'border-transparent'}"><i data-lucide="${i}" class="w-6 h-6 text-pink-500"></i></button>`).join('');
+            lucide.createIcons();
+        };
+        window.copyExportList = () => { document.getElementById('exportText').select(); document.execCommand('copy'); showToast("Copiado!"); };
+        window.closeExportModal = () => document.getElementById('exportModal').classList.add('hidden');
+
+        document.getElementById('searchInput').oninput = render;
+        lucide.createIcons();
+    </script>
+</body>
+</html>
